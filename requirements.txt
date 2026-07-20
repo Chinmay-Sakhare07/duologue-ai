@@ -2,4 +2,6 @@ streamlit
 groq
 edge-tts
 pydub
+pypdf
+trafilatura
 audioop-lts; python_version >= "3.13"
