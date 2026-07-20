@@ -5,14 +5,44 @@ import json
 from groq import Groq
 
 MODEL = "llama-3.3-70b-versatile"
+RESEARCH_MODEL = "llama-3.1-8b-instant"
 
 
 class ScriptGenerationError(Exception):
-    """Raised when the LLM call itself fails (network, rate limit, etc.)."""
+    """Raised when an LLM call itself fails (network, rate limit, etc.)."""
 
 
 class ScriptParseError(Exception):
     """Raised when the LLM returns something we can't parse into a script."""
+
+
+def research_topic(topic, api_key):
+    """Turn a bare topic into a short research brief to feed the script step.
+
+    Uses the cheaper, faster 8B model. Returns brief text, or raises ScriptGenerationError.
+    """
+    try:
+        client = Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model=RESEARCH_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a research assistant. Given a topic, write a concise, factual "
+                        "briefing of about 200-300 words covering the key points, useful context, "
+                        "and a few interesting angles someone would need to discuss it intelligently. "
+                        "Write plain prose with no headings or bullet points."
+                    ),
+                },
+                {"role": "user", "content": f"Topic: {topic}"},
+            ],
+            temperature=0.7,
+            max_tokens=700,
+        )
+    except Exception as e:
+        raise ScriptGenerationError(str(e)) from e
+    return response.choices[0].message.content
 
 
 def _build_system_prompt(tone_desc, length, hosts):

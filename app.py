@@ -5,7 +5,12 @@ import streamlit as st
 
 from config import HOST_PRESETS, LENGTHS, MAX_SOURCE_CHARS, TONES
 from ingestion import extract_pdf_text, extract_url_text
-from script import ScriptGenerationError, ScriptParseError, generate_script
+from script import (
+    ScriptGenerationError,
+    ScriptParseError,
+    generate_script,
+    research_topic,
+)
 from tts import AllTTSProvidersFailed, PRIMARY, synthesize_turns
 from audio import stitch_audio
 
@@ -21,21 +26,25 @@ if not logger.handlers:
 st.set_page_config(page_title="Duologue AI")
 
 st.title("Duologue AI")
-st.write("Turn text, a PDF, or an article URL into a two-host podcast conversation.")
+st.write("Turn text, a PDF, an article URL, or just a topic into a two-host podcast conversation.")
 
 # --- Source selection ---
-source_type = st.radio("Source", ["Paste text", "PDF", "URL"], horizontal=True)
+source_type = st.radio("Source", ["Paste text", "PDF", "URL", "Topic"], horizontal=True)
 
 pasted_text = ""
 uploaded_pdf = None
 url = ""
+topic = ""
 if source_type == "Paste text":
     pasted_text = st.text_area("Source text", height=250,
                                placeholder="Paste an article or any text here...")
 elif source_type == "PDF":
     uploaded_pdf = st.file_uploader("Upload a PDF", type=["pdf"])
-else:  # URL
+elif source_type == "URL":
     url = st.text_input("Article URL", placeholder="https://...")
+else:  # Topic
+    topic = st.text_input("Topic", max_chars=500,
+                          placeholder="e.g. the history of the espresso machine")
 
 col1, col2, col3 = st.columns(3)
 tone_choice = col1.selectbox("Tone", list(TONES.keys()))
@@ -46,8 +55,10 @@ if length_choice != "5 min":
     st.caption("Heads-up: on the free tier, longer scripts may truncate or hit the rate limit. 5 min is the reliable option for now.")
 
 if st.button("Generate podcast"):
+    api_key = st.secrets["GROQ_API_KEY"]
+
     # --- Step 1: turn the chosen source into clean text ---
-    with st.spinner("Reading your source..."):
+    with st.spinner("Preparing your source..."):
         if source_type == "Paste text":
             source_text = pasted_text.strip()
         elif source_type == "PDF":
@@ -60,7 +71,7 @@ if st.button("Generate podcast"):
                 logger.exception("PDF extraction failed")
                 st.error("Couldn't read that PDF. Please try a different file.")
                 st.stop()
-        else:  # URL
+        elif source_type == "URL":
             if not url.strip():
                 st.warning("Please enter a URL first.")
                 st.stop()
@@ -69,6 +80,16 @@ if st.button("Generate podcast"):
             except Exception:
                 logger.exception("URL extraction failed")
                 st.error("Couldn't fetch that URL. Please check it, or paste the text instead.")
+                st.stop()
+        else:  # Topic
+            if not topic.strip():
+                st.warning("Please enter a topic first.")
+                st.stop()
+            try:
+                source_text = research_topic(topic.strip(), api_key).strip()
+            except ScriptGenerationError:
+                logger.exception("Topic research failed")
+                st.error("Couldn't research that topic right now. Please try again.")
                 st.stop()
 
     if not source_text:
@@ -93,8 +114,7 @@ if st.button("Generate podcast"):
 
     with st.spinner("Writing the script..."):
         try:
-            turns = generate_script(source_text, tone_choice, tone_desc, length, hosts,
-                                    st.secrets["GROQ_API_KEY"])
+            turns = generate_script(source_text, tone_choice, tone_desc, length, hosts, api_key)
         except ScriptGenerationError:
             logger.exception("Groq request failed")
             st.error("The script generator is unavailable right now. Please try again in a moment.")
