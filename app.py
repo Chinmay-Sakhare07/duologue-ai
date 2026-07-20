@@ -4,11 +4,13 @@ import logging
 import os
 import tempfile
 
+import static_ffmpeg
+static_ffmpeg.add_paths(weak=True)  # puts ffmpeg + ffprobe on PATH; must run before pydub is imported
+
 import edge_tts
 import streamlit as st
-
-from pydub import AudioSegment
 from groq import Groq
+from pydub import AudioSegment
 
 # --- Logging setup (configured once, even though Streamlit reruns this file) ---
 logger = logging.getLogger("duologue")
