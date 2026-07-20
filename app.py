@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import uuid
 
 import streamlit as st
@@ -16,6 +17,9 @@ from tts import AllTTSProvidersFailed, PRIMARY, synthesize_turns
 from audio import stitch_audio
 from db import get_client, get_audio_url, list_episodes, save_episode
 
+RATE_LIMIT = 5              # generations allowed per session...
+RATE_WINDOW = 3600          # ...within this many seconds (1 hour)
+
 # --- Logging setup (configured once, even though Streamlit reruns this file) ---
 logger = logging.getLogger("duologue")
 if not logger.handlers:
@@ -25,8 +29,47 @@ if not logger.handlers:
     logger.addHandler(_handler)
     logger.propagate = False
 
-st.set_page_config(page_title="Duologue AI")
-st.title("Duologue AI")
+st.set_page_config(page_title="Duologue AI", page_icon="🎙️")
+
+# --- Visual polish (internal selectors; harmless if a Streamlit update ignores them) ---
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {padding-top: 2.5rem; max-width: 900px;}
+
+    /* Gradient title */
+    h1 {
+        background: linear-gradient(90deg, #A78BFA 0%, #F0A868 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Accent bar on bordered cards */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-left: 3px solid #A78BFA !important;
+    }
+
+    /* Primary button: gradient fill */
+    .stButton > button {
+        background: linear-gradient(90deg, #7C3AED 0%, #A78BFA 100%);
+        color: white;
+        border: none;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #6D28D9 0%, #9333EA 100%);
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("🎙️ Duologue AI")
 
 tab_create, tab_library = st.tabs(["Create", "My Episodes"])
 
@@ -59,8 +102,17 @@ with tab_create:
         st.caption("Heads-up: on the free tier, longer scripts may truncate or hit the rate limit. 5 min is the reliable option for now.")
 
     if st.button("Generate podcast"):
+        # --- per-session rate limit ---
+        now = time.time()
+        recent = [t for t in st.session_state.get("gen_times", []) if now - t < RATE_WINDOW]
+        if len(recent) >= RATE_LIMIT:
+            st.error(f"You've reached the limit of {RATE_LIMIT} generations per hour. Please try again later.")
+            st.stop()
+        st.session_state["gen_times"] = recent + [now]
+
         api_key = st.secrets["GROQ_API_KEY"]
 
+        # --- Step 1: turn the chosen source into clean text ---
         with st.spinner("Preparing your source..."):
             if source_type == "Paste text":
                 source_text = pasted_text.strip()
@@ -107,6 +159,7 @@ with tab_create:
             logger.info("Source truncated to %d chars", MAX_SOURCE_CHARS)
             st.caption("Your source was long, so only the beginning was used to stay within free-tier limits.")
 
+        # --- Step 2: script -> voices -> stitch -> save ---
         tone_desc = TONES[tone_choice]
         length = LENGTHS[length_choice]
         hosts = HOST_PRESETS[preset_choice]
@@ -157,6 +210,7 @@ with tab_create:
                 except OSError:
                     pass
 
+        # --- Save to the library (best-effort; a failure here must not block the result) ---
         episode_id = str(uuid.uuid4())
         try:
             client = get_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -190,6 +244,14 @@ with tab_create:
 
 with tab_library:
     st.write("Episodes created with Duologue AI.")
+
+    # Icons are pure presentation, so they live here in the UI, not in config.py.
+    PRESET_ICONS = {
+        "Two Friends": "👥",
+        "Expert + Novice": "🎓",
+        "Skeptic + Believer": "⚖️",
+    }
+
     try:
         lib_client = get_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         episodes = list_episodes(lib_client)
@@ -201,16 +263,19 @@ with tab_library:
     if not episodes:
         st.caption("No episodes yet — create one in the Create tab.")
     else:
-        for ep in episodes:
-            with st.container(border=True):
-                st.markdown(f"**{ep['title']}**")
-                secs_total = ep.get("duration_seconds") or 0
-                st.caption(
-                    f"{ep.get('host_preset', '')} · {ep.get('tone', '')} · "
-                    f"{secs_total // 60}:{secs_total % 60:02d} · {ep['created_at'][:10]}"
-                )
-                try:
-                    st.audio(get_audio_url(lib_client, ep["audio_path"]), format="audio/mp3")
-                except Exception:
-                    logger.exception("Audio URL failed for %s", ep.get("id"))
-                    st.caption("Audio unavailable.")
+        cols = st.columns(2)
+        for i, ep in enumerate(episodes):
+            with cols[i % 2]:
+                with st.container(border=True):
+                    icon = PRESET_ICONS.get(ep.get("host_preset"), "🎙️")
+                    secs_total = ep.get("duration_seconds") or 0
+                    st.markdown(f"### {icon}")
+                    st.markdown(f"**{ep['title']}**")
+                    st.caption(
+                        f"{ep.get('tone', '')} · {secs_total // 60}:{secs_total % 60:02d} · {ep['created_at'][:10]}"
+                    )
+                    try:
+                        st.audio(get_audio_url(lib_client, ep["audio_path"]), format="audio/mp3")
+                    except Exception:
+                        logger.exception("Audio URL failed for %s", ep.get("id"))
+                        st.caption("Audio unavailable.")
