@@ -131,14 +131,3 @@ streamlit run app.py
 
 ---
 
-## Roadmap
-
-- [ ] Authentication + per-user libraries
-- [ ] A third TTS provider for distinct voices in production
-- [ ] Cover art (a generated title card, or an image API)
-- [ ] Long-form (15/30-min) episodes via chunked generation
-- [ ] Stricter structured output via Groq `json_schema`
-
----
-
-## More
