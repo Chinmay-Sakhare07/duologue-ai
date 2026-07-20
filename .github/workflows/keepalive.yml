@@ -1,0 +1,21 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "0 6 * * *"      # daily at 06:00 UTC
+  workflow_dispatch:          # lets you trigger it manually from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Supabase to reset the inactivity timer
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/episodes?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}")
+          echo "Supabase responded with HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "Keep-alive query did not return 200"; exit 1
+          fi
