@@ -17,22 +17,26 @@ class ScriptParseError(Exception):
 
 def _build_system_prompt(tone_desc, length, hosts):
     return f"""You are producing a podcast script for a show called "Duologue".
-The podcast has exactly two hosts: A and B.
+The podcast has exactly two hosts.
 
-HOST A PERSONALITY: {hosts['a']}
-HOST B PERSONALITY: {hosts['b']}
+HOST A is {hosts['name_a']}: {hosts['persona_a']}.
+HOST B is {hosts['name_b']}: {hosts['persona_b']}.
 
 TONE: {tone_desc}
 TARGET LENGTH: approximately {length['words']} words total (~{length['minutes']} minutes)
 
 RULES:
-- Alternate turns naturally; either host may speak twice in a row when continuing a thought
-- Each turn: 1-4 sentences of natural, spoken language
-- Include reactions ("wow", "really?"), small tangents, and natural interruptions
-- Do NOT include stage directions, sound-effect notes, or host names inside the text
-- Do NOT reference being AI hosts or that the content is generated
+- Write in the voice of each host's personality; let their characters come through.
+- Alternate turns naturally; either host may speak twice in a row when continuing a thought.
+- The hosts may address each other by first name now and then, like real co-hosts.
+- Each turn: 1-4 sentences of natural, spoken language.
+- Include reactions ("wow", "really?"), small tangents, and natural interruptions.
+- Do NOT prefix a line with the speaker's name or any label — put only spoken words in "text".
+- Do NOT include stage directions or sound-effect notes.
+- Do NOT reference being AI hosts or that the content is generated.
 
-OUTPUT FORMAT: Return a JSON object with a single key "script" whose value is an array of turns:
+OUTPUT FORMAT: Return a JSON object with a single key "script" whose value is an array of turns.
+Each turn is {{"speaker": "A" or "B", "text": "..."}}:
 {{"script": [{{"speaker": "A", "text": "..."}}, {{"speaker": "B", "text": "..."}}]}}
 
 Return only the JSON object, nothing else."""
