@@ -7,7 +7,7 @@ from pydub import AudioSegment
 
 
 def stitch_audio(audio_paths, gap_ms=300):
-    """Combine per-turn MP3s into one MP3 with silence gaps. Returns bytes."""
+    """Combine per-turn MP3s into one MP3 with silence gaps. Returns (bytes, duration_seconds)."""
     combined = AudioSegment.empty()
     silence = AudioSegment.silent(duration=gap_ms)
     for path in audio_paths:
@@ -17,4 +17,7 @@ def stitch_audio(audio_paths, gap_ms=300):
     out_path = os.path.join(tempfile.gettempdir(), "duologue_episode.mp3")
     combined.export(out_path, format="mp3", bitrate="128k")
     with open(out_path, "rb") as f:
-        return f.read()
+        data = f.read()
+
+    duration_seconds = round(len(combined) / 1000)
+    return data, duration_seconds

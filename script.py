@@ -17,10 +17,7 @@ class ScriptParseError(Exception):
 
 
 def research_topic(topic, api_key):
-    """Turn a bare topic into a short research brief to feed the script step.
-
-    Uses the cheaper, faster 8B model. Returns brief text, or raises ScriptGenerationError.
-    """
+    """Turn a bare topic into a short research brief. Uses the cheaper 8B model. Returns text, or raises."""
     try:
         client = Groq(api_key=api_key)
         response = client.chat.completions.create(
@@ -65,9 +62,12 @@ RULES:
 - Do NOT include stage directions or sound-effect notes.
 - Do NOT reference being AI hosts or that the content is generated.
 
-OUTPUT FORMAT: Return a JSON object with a single key "script" whose value is an array of turns.
-Each turn is {{"speaker": "A" or "B", "text": "..."}}:
-{{"script": [{{"speaker": "A", "text": "..."}}, {{"speaker": "B", "text": "..."}}]}}
+OUTPUT FORMAT: Return a JSON object with two keys:
+- "title": a short, catchy episode title (under 8 words)
+- "script": an array of turns, each {{"speaker": "A" or "B", "text": "..."}}
+
+Example:
+{{"title": "...", "script": [{{"speaker": "A", "text": "..."}}, {{"speaker": "B", "text": "..."}}]}}
 
 Return only the JSON object, nothing else."""
 
@@ -86,7 +86,7 @@ Produce a {tone_key.lower()} podcast script covering this material."""
 
 
 def generate_script(source_text, tone_key, tone_desc, length, hosts, api_key):
-    """Return a list of {"speaker", "text"} turns, or raise a Script*Error."""
+    """Return (title, turns) — the episode title and a list of {"speaker", "text"} turns. Raises Script*Error."""
     system_prompt = _build_system_prompt(tone_desc, length, hosts)
     user_prompt = _build_user_prompt(source_text, tone_key)
 
@@ -107,6 +107,7 @@ def generate_script(source_text, tone_key, tone_desc, length, hosts, api_key):
 
     raw = response.choices[0].message.content
     try:
-        return json.loads(raw)["script"]
+        data = json.loads(raw)
+        return data["title"], data["script"]
     except (json.JSONDecodeError, KeyError) as e:
         raise ScriptParseError(str(e)) from e

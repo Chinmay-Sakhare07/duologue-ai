@@ -1,5 +1,6 @@
 import logging
 import os
+import uuid
 
 import streamlit as st
 
@@ -13,6 +14,7 @@ from script import (
 )
 from tts import AllTTSProvidersFailed, PRIMARY, synthesize_turns
 from audio import stitch_audio
+from db import get_client, save_episode
 
 # --- Logging setup (configured once, even though Streamlit reruns this file) ---
 logger = logging.getLogger("duologue")
@@ -104,7 +106,7 @@ if st.button("Generate podcast"):
         logger.info("Source truncated to %d chars", MAX_SOURCE_CHARS)
         st.caption("Your source was long, so only the beginning was used to stay within free-tier limits.")
 
-    # --- Step 2: script -> voices -> stitch ---
+    # --- Step 2: script -> voices -> stitch -> save ---
     tone_desc = TONES[tone_choice]
     length = LENGTHS[length_choice]
     hosts = HOST_PRESETS[preset_choice]
@@ -114,7 +116,7 @@ if st.button("Generate podcast"):
 
     with st.spinner("Writing the script..."):
         try:
-            turns = generate_script(source_text, tone_choice, tone_desc, length, hosts, api_key)
+            title, turns = generate_script(source_text, tone_choice, tone_desc, length, hosts, api_key)
         except ScriptGenerationError:
             logger.exception("Groq request failed")
             st.error("The script generator is unavailable right now. Please try again in a moment.")
@@ -142,8 +144,8 @@ if st.button("Generate podcast"):
 
     try:
         with st.spinner("Stitching the episode..."):
-            episode_bytes = stitch_audio(audio_paths)
-        logger.info("Stitched episode | bytes=%d", len(episode_bytes))
+            episode_bytes, duration_seconds = stitch_audio(audio_paths)
+        logger.info("Stitched episode | bytes=%d seconds=%d", len(episode_bytes), duration_seconds)
     except Exception:
         logger.exception("Stitching failed")
         st.error("Couldn't assemble the final audio. Please try again.")
@@ -155,8 +157,25 @@ if st.button("Generate podcast"):
             except OSError:
                 pass
 
+    # --- Save to the library (best-effort; a failure here must not block the result) ---
+    episode_id = str(uuid.uuid4())
+    try:
+        client = get_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        save_episode(client, episode_id, episode_bytes, {
+            "title": title,
+            "duration_seconds": duration_seconds,
+            "source_type": source_type,
+            "tone": tone_choice,
+            "host_preset": preset_choice,
+            "transcript": turns,
+        })
+        logger.info("Episode saved | id=%s", episode_id)
+    except Exception:
+        logger.exception("Saving episode failed")
+        st.caption("(Couldn't save this to your library, but your episode is ready below.)")
+
     st.divider()
-    st.subheader("Your episode")
+    st.subheader(title)
     st.audio(episode_bytes, format="audio/mp3")
     st.download_button(
         label="Download MP3",
