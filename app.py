@@ -6,6 +6,8 @@ import tempfile
 
 import edge_tts
 import streamlit as st
+
+from pydub import AudioSegment
 from groq import Groq
 
 # --- Logging setup (configured once, even though Streamlit reruns this file) ---
@@ -72,6 +74,19 @@ def synthesize_turns(turns, voice_a, voice_b):
     """Sync wrapper so Streamlit can call the async TTS directly."""
     out_dir = tempfile.mkdtemp(prefix="duologue_")
     return asyncio.run(_synthesize_all(turns, voice_a, voice_b, out_dir))
+
+def stitch_audio(audio_paths, gap_ms=300):
+    """Combine per-turn MP3s into one file with silence gaps. Returns bytes."""
+    combined = AudioSegment.empty()
+    silence = AudioSegment.silent(duration=gap_ms)
+    for path in audio_paths:
+        turn_audio = AudioSegment.from_mp3(path)
+        combined += turn_audio + silence
+
+    out_path = os.path.join(tempfile.gettempdir(), "duologue_episode.mp3")
+    combined.export(out_path, format="mp3", bitrate="128k")
+    with open(out_path, "rb") as f:
+        return f.read()
 
 
 st.title("Duologue AI")
@@ -168,8 +183,34 @@ Produce a {tone_choice.lower()} podcast script covering this material."""
 
     logger.info("Synthesis complete | clips=%d", len(audio_paths))
 
+    logger.info("Synthesis complete | clips=%d", len(audio_paths))
+
+    try:
+        with st.spinner("Stitching the episode..."):
+            episode_bytes = stitch_audio(audio_paths)
+        logger.info("Stitched episode | bytes=%d", len(episode_bytes))
+    except Exception:
+        logger.exception("Stitching failed")
+        st.error("Couldn't assemble the final audio. Please try again.")
+        st.stop()
+    finally:
+        for path in audio_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
     st.divider()
-    for turn, path in zip(turns, audio_paths):
-        speaker = "Host A" if turn["speaker"] == "A" else "Host B"
-        st.markdown(f"**{speaker}:** {turn['text']}")
-        st.audio(path)
+    st.subheader("Your episode")
+    st.audio(episode_bytes, format="audio/mp3")
+    st.download_button(
+        label="Download MP3",
+        data=episode_bytes,
+        file_name="duologue_episode.mp3",
+        mime="audio/mp3",
+    )
+
+    with st.expander("Transcript"):
+        for turn in turns:
+            speaker = "Host A" if turn["speaker"] == "A" else "Host B"
+            st.markdown(f"**{speaker}:** {turn['text']}")
