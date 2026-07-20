@@ -1,6 +1,7 @@
 streamlit
 groq
 edge-tts
+gTTS
 pydub
 pypdf
 trafilatura

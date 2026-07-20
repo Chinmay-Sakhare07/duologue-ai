@@ -6,7 +6,7 @@ import streamlit as st
 from config import HOST_PRESETS, LENGTHS, MAX_SOURCE_CHARS, TONES
 from ingestion import extract_pdf_text, extract_url_text
 from script import ScriptGenerationError, ScriptParseError, generate_script
-from tts import synthesize_turns
+from tts import AllTTSProvidersFailed, PRIMARY, synthesize_turns
 from audio import stitch_audio
 
 # --- Logging setup (configured once, even though Streamlit reruns this file) ---
@@ -108,13 +108,17 @@ if st.button("Generate podcast"):
 
     with st.spinner("Recording the voices..."):
         try:
-            audio_paths = synthesize_turns(turns, hosts["voice_a"], hosts["voice_b"])
-        except Exception:
-            logger.exception("Voice generation failed")
-            st.error("Voice generation failed — this may be a temporary issue with the TTS service.")
+            audio_paths, tts_provider = synthesize_turns(turns, preset_choice)
+        except AllTTSProvidersFailed:
+            logger.exception("All TTS providers failed")
+            st.error("Voice generation is unavailable right now. Please try again in a moment.")
             st.stop()
 
-    logger.info("Synthesis complete | clips=%d", len(audio_paths))
+    if tts_provider != PRIMARY:
+        logger.warning("TTS fell back to %s", tts_provider)
+        st.info("Our main voices were unavailable, so this episode uses backup voices — they sound a bit different.")
+
+    logger.info("Synthesis complete | provider=%s clips=%d", tts_provider, len(audio_paths))
 
     try:
         with st.spinner("Stitching the episode..."):
@@ -143,5 +147,5 @@ if st.button("Generate podcast"):
 
     with st.expander("Transcript"):
         for turn in turns:
-            speaker = "Host A" if turn["speaker"] == "A" else "Host B"
-            st.markdown(f"**{speaker}:** {turn['text']}")
+            name = hosts["name_a"] if turn["speaker"] == "A" else hosts["name_b"]
+            st.markdown(f"**{name}:** {turn['text']}")

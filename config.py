@@ -1,4 +1,9 @@
-"""Static configuration: tones, lengths, host presets, and limits."""
+"""Static configuration: tones, lengths, host presets, and limits.
+
+Host presets hold personas + names only. Voice details live in the TTS
+providers (tts_edge.py, tts_gtts.py), keyed by preset name — so each
+provider decides how to voice the same set of hosts.
+"""
 
 MAX_SOURCE_CHARS = 12000  # keep the prompt within the free-tier token budget
 
@@ -17,21 +22,21 @@ LENGTHS = {
 
 HOST_PRESETS = {
     "Two Friends": {
-        "a": "warm and curious, asks good follow-up questions",
-        "b": "knowledgeable, explains clearly, cracks the occasional joke",
-        "voice_a": "en-US-AriaNeural",
-        "voice_b": "en-US-GuyNeural",
+        "name_a": "Maya",
+        "name_b": "Theo",
+        "persona_a": "warm and curious, asks the questions listeners are thinking, and reacts openly ('wait, really?')",
+        "persona_b": "easygoing and knowledgeable, explains things clearly with the occasional dry joke, and loves a good tangent",
     },
     "Expert + Novice": {
-        "a": "an expert who explains ideas clearly and patiently",
-        "b": "an enthusiastic novice who asks the questions a beginner would ask",
-        "voice_a": "en-US-JennyNeural",
-        "voice_b": "en-US-DavisNeural",
+        "name_a": "Elena",
+        "name_b": "Jai",
+        "persona_a": "a patient expert who explains ideas clearly with vivid analogies and never talks down to anyone",
+        "persona_b": "an enthusiastic newcomer who asks the beginner questions and lights up when something clicks",
     },
     "Skeptic + Believer": {
-        "a": "a skeptic who questions claims and asks for evidence",
-        "b": "a believer who is enthusiastic and optimistic about the topic",
-        "voice_a": "en-US-EmmaNeural",
-        "voice_b": "en-US-BrianNeural",
+        "name_a": "Nora",
+        "name_b": "Sam",
+        "persona_a": "a fair-minded skeptic who probes claims and asks for evidence before accepting anything",
+        "persona_b": "an optimist who's genuinely excited about the ideas and sees their potential",
     },
 }

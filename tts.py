@@ -1,24 +1,32 @@
-"""Text-to-speech via Edge TTS. Isolated so the backend can be swapped. Pure logic — no Streamlit."""
+"""TTS orchestration: try providers in order, first success wins (graceful degradation).
 
-import asyncio
-import os
-import tempfile
+Pure logic — no Streamlit. Returns which provider succeeded so the UI can note a fallback.
+Adding a third provider is a one-line change to PROVIDERS.
+"""
 
-import edge_tts
+import tts_edge
+import tts_gtts
 
+# Ordered fallback chain: best quality first, sturdier fallback second.
+PROVIDERS = [
+    ("Edge TTS", tts_edge.synthesize),
+    ("gTTS", tts_gtts.synthesize),
+]
 
-async def _synthesize_all(turns, voice_a, voice_b, out_dir):
-    paths = []
-    for i, turn in enumerate(turns):
-        voice = voice_a if turn["speaker"] == "A" else voice_b
-        path = os.path.join(out_dir, f"turn_{i}.mp3")
-        communicate = edge_tts.Communicate(turn["text"], voice)
-        await communicate.save(path)
-        paths.append(path)
-    return paths
+PRIMARY = PROVIDERS[0][0]
 
 
-def synthesize_turns(turns, voice_a, voice_b):
-    """Generate one MP3 per turn. Returns a list of file paths in a temp dir."""
-    out_dir = tempfile.mkdtemp(prefix="duologue_")
-    return asyncio.run(_synthesize_all(turns, voice_a, voice_b, out_dir))
+class AllTTSProvidersFailed(Exception):
+    """Raised when every provider in the chain failed."""
+
+
+def synthesize_turns(turns, preset_name):
+    """Voice the whole episode. Returns (mp3_paths, provider_name). Raises AllTTSProvidersFailed."""
+    errors = []
+    for name, provider in PROVIDERS:
+        try:
+            paths = provider(turns, preset_name)
+            return paths, name
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+    raise AllTTSProvidersFailed(" | ".join(errors))
