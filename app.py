@@ -4,9 +4,6 @@ import logging
 import os
 import tempfile
 
-import static_ffmpeg
-static_ffmpeg.add_paths(weak=True)  # puts ffmpeg + ffprobe on PATH; must run before pydub is imported
-
 import edge_tts
 import streamlit as st
 from groq import Groq
@@ -77,6 +74,8 @@ def synthesize_turns(turns, voice_a, voice_b):
     out_dir = tempfile.mkdtemp(prefix="duologue_")
     return asyncio.run(_synthesize_all(turns, voice_a, voice_b, out_dir))
 
+
+# --- Audio stitching ---
 def stitch_audio(audio_paths, gap_ms=300):
     """Combine per-turn MP3s into one file with silence gaps. Returns bytes."""
     combined = AudioSegment.empty()
@@ -182,8 +181,6 @@ Produce a {tone_choice.lower()} podcast script covering this material."""
             logger.exception("Voice generation failed")
             st.error("Voice generation failed — this may be a temporary issue with the TTS service.")
             st.stop()
-
-    logger.info("Synthesis complete | clips=%d", len(audio_paths))
 
     logger.info("Synthesis complete | clips=%d", len(audio_paths))
 
